@@ -92,8 +92,20 @@ func main() {
 		close(p)
 	}()
 
+	entries := make(map[string][]string)
+
 	for e := range p {
-		fmt.Printf("%s\t%s\n", e.hash[:12], e.path)
+		entries[e.hash] = append(entries[e.hash], e.path)
+	}
+	for h, p := range entries {
+		if len(p) == 1 {
+			continue
+		}
+		fmt.Println("Duplicate Files Detected")
+		for _, p := range p {
+			fmt.Printf("\t%s\t%s\n", h[:15], p)
+		}
+		fmt.Printf("\n")
 	}
 
 }
