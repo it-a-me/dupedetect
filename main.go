@@ -12,6 +12,8 @@ import (
 
 func HashFile(path string) ([]byte, error) {
 	file, err := os.Open(path)
+	defer file.Close()
+
 	if err != nil {
 		return []byte{}, err
 	}
@@ -25,20 +27,63 @@ func HashFile(path string) ([]byte, error) {
 	return sum, nil
 }
 
+func NewFileEntry(path string) (FileEntry, error) {
+	hash, err := HashFile(path)
+	if err != nil {
+		return FileEntry{}, err
+	}
+	h := hex.EncodeToString(hash)
+	return FileEntry{path, h}, nil
+}
+
+type FileEntry struct {
+	path string
+	hash string
+}
+
+func RecursiveHash(root string, p chan FileEntry) error {
+	if stat, err := os.Stat(root); err != nil {
+		return err
+	} else if stat.IsDir() {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			err := RecursiveHash(root+"/"+entry.Name(), p)
+			if err != nil {
+				return err
+			}
+		}
+
+	} else {
+		fe, err := NewFileEntry(root)
+		if err != nil {
+			return err
+		}
+		p <- fe
+
+	}
+	return nil
+}
+
 func main() {
-	if len(os.Args) <= 1 {
-		log.Printf("Please supply one or more files to checksum\n")
+	if len(os.Args) != 2 {
+		log.Printf("Please supply one file or directory to checksum\n")
 		os.Exit(1)
 	}
-	for i, p := range os.Args {
-		if i == 0 {
-			continue
-		}
-		sum, err := HashFile(p)
+
+	p := make(chan FileEntry)
+	go func() {
+		err := RecursiveHash(os.Args[1], p)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("%s\t%s", hex.EncodeToString(sum)[:15], p)
+		close(p)
+	}()
+
+	for e := range p {
+		fmt.Printf("%s\t%s\n", e.hash[:12], e.path)
 	}
 
 }
