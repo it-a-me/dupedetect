@@ -49,20 +49,25 @@ func RecursiveHash(root string, p chan FileEntry) error {
 		if err != nil {
 			return err
 		}
+		results := make(chan error)
 		for _, entry := range entries {
-			err := RecursiveHash(root+"/"+entry.Name(), p)
-			if err != nil {
+			go func() {
+				err := RecursiveHash(root+"/"+entry.Name(), p)
+				results <- err
+			}()
+		}
+
+		for range entries {
+			if err := <-results; err != nil {
 				return err
 			}
 		}
-
 	} else {
 		fe, err := NewFileEntry(root)
 		if err != nil {
 			return err
 		}
 		p <- fe
-
 	}
 	return nil
 }
@@ -73,9 +78,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := make(chan FileEntry)
+	p := make(chan FileEntry, 5)
+	root := os.Args[1]
+	if root[len(root)-1] == '/' {
+		root = root[:len(root)-1]
+	}
+
 	go func() {
-		err := RecursiveHash(os.Args[1], p)
+		err := RecursiveHash(root, p)
 		if err != nil {
 			panic(err)
 		}
